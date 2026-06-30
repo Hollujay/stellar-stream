@@ -20,6 +20,8 @@ import { useWebSocket } from "./hooks/useWebSocket";
 import { useUrlFilters } from "./hooks/useUrlFilters";
 import {
   ApiError,
+  bulkCancelStreams,
+  bulkPauseStreams,
   cancelStream,
   createStream,
   getWebSocketUrl,
@@ -268,6 +270,44 @@ function App() {
     }
   }
 
+  async function handleBulkCancel(streamIds: string[]): Promise<void> {
+    try {
+      const results = await bulkCancelStreams(streamIds);
+      const failures = results.filter((r) => !r.success);
+      if (failures.length > 0) {
+        showToast(
+          `Canceled ${results.length - failures.length}/${results.length}. Failures: ${failures.map((f) => `${f.streamId}: ${f.error}`).join("; ")}`,
+          "error",
+        );
+      } else {
+        showToast(`Canceled ${results.length} stream${results.length !== 1 ? "s" : ""}`, "info");
+      }
+      await refreshStreams(apiFilters);
+      void refreshUnfilteredCount();
+    } catch (err) {
+      showToast("Bulk cancel failed", "error");
+    }
+  }
+
+  async function handleBulkPause(streamIds: string[]): Promise<void> {
+    try {
+      const results = await bulkPauseStreams(streamIds);
+      const failures = results.filter((r) => !r.success);
+      if (failures.length > 0) {
+        showToast(
+          `Paused ${results.length - failures.length}/${results.length}. Failures: ${failures.map((f) => `${f.streamId}: ${f.error}`).join("; ")}`,
+          "error",
+        );
+      } else {
+        showToast(`Paused ${results.length} stream${results.length !== 1 ? "s" : ""}`, "info");
+      }
+      await refreshStreams(apiFilters);
+      void refreshUnfilteredCount();
+    } catch (err) {
+      showToast("Bulk pause failed", "error");
+    }
+  }
+
   async function handleUpdateStartTime(streamId: string, nextStartAt: number) {
     try {
       await updateStreamStartAt(streamId, nextStartAt);
@@ -394,6 +434,8 @@ function App() {
               onCancel={handleCancel}
               onPause={handlePause}
               onResume={handleResume}
+              onBulkCancel={handleBulkCancel}
+              onBulkPause={handleBulkPause}
               onEditStartTime={(stream, triggerRef) =>
                 setEditingStream({ stream, triggerRef })
               }

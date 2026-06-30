@@ -317,6 +317,14 @@ input {
   cursor: not-allowed;
 }
 
+.btn-danger {
+  background: #c0392b;
+}
+
+.btn-danger:hover:not(:disabled) {
+  background: #a93226;
+}
+
 .btn-ghost {
   border: 1px solid #d1d5db;
   border-radius: 8px;

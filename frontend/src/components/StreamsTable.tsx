@@ -10,7 +10,7 @@ import {
 } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { Stream } from "../types/stream";
-import { getExportCsvUrl, ListStreamsFilters, cancelStream } from "../services/api";
+import { getExportCsvUrl, ListStreamsFilters } from "../services/api";
 import { CopyableAddress } from "./CopyableAddress";
 import { StreamTimeline } from "./StreamTimeline";
 import { getHealthBadges } from "../utils/streamHealthBadges";
@@ -22,6 +22,7 @@ import {
   type OptionalStreamColumn,
 } from "../hooks/useStreamTableColumns";
 import { useWebSocket } from "../hooks/useWebSocket";
+import { useFocusTrap } from "../hooks/useFocusTrap";
 
 interface StreamsTableProps {
   streams: Stream[];
@@ -31,6 +32,8 @@ interface StreamsTableProps {
   onCancel: (streamId: string) => Promise<void>;
   onPause: (streamId: string) => Promise<void>;
   onResume: (streamId: string) => Promise<void>;
+  onBulkCancel?: (streamIds: string[]) => Promise<void>;
+  onBulkPause?: (streamIds: string[]) => Promise<void>;
   onOpenStream?: (streamId: string) => void;
   onEditStartTime: (stream: Stream, triggerRef: RefObject<HTMLButtonElement | null>) => void;
   // Optional props expected by App.tsx
@@ -99,6 +102,8 @@ export function StreamsTable({
   onCancel,
   onPause,
   onResume,
+  onBulkCancel,
+  onBulkPause,
   onEditStartTime,
   onOpenStream,
   onLoadMore,
@@ -161,8 +166,8 @@ export function StreamsTable({
 
   const [selectedStreamIds, setSelectedStreamIds] = useState<Set<string>>(new Set());
   const [expandedStreamId, setExpandedStreamId] = useState<string | null>(null);
-  const [isBulkCanceling, setIsBulkCanceling] = useState(false);
-  const [bulkCancelProgress, setBulkCancelProgress] = useState({ current: 0, total: 0 });
+  const [pendingBulkAction, setPendingBulkAction] = useState<"cancel" | "pause" | null>(null);
+  const [isBulkProcessing, setIsBulkProcessing] = useState(false);
 
   const exportUrl = useMemo(() => getExportCsvUrl(filters as Record<string, string>), [filters]);
 
@@ -242,26 +247,23 @@ export function StreamsTable({
     onOpenStream?.(id);
   }, [onOpenStream]);
 
-  const handleBulkCancel = useCallback(async () => {
-    const idsToCancel = Array.from(selectedStreamIds);
-    if (idsToCancel.length === 0) return;
+  const handleBulkActionConfirm = useCallback(async () => {
+    const ids = Array.from(selectedStreamIds);
+    if (ids.length === 0) return;
 
-    setIsBulkCanceling(true);
-    setBulkCancelProgress({ current: 0, total: idsToCancel.length });
-
-    for (let i = 0; i < idsToCancel.length; i++) {
-      setBulkCancelProgress({ current: i + 1, total: idsToCancel.length });
-      try {
-        await cancelStream(idsToCancel[i]);
-      } catch (error) {
-        console.error(`Failed to cancel stream ${idsToCancel[i]}:`, error);
+    setIsBulkProcessing(true);
+    try {
+      if (pendingBulkAction === "cancel" && onBulkCancel) {
+        await onBulkCancel(ids);
+      } else if (pendingBulkAction === "pause" && onBulkPause) {
+        await onBulkPause(ids);
       }
+      setSelectedStreamIds(new Set());
+    } finally {
+      setIsBulkProcessing(false);
+      setPendingBulkAction(null);
     }
-
-    setSelectedStreamIds(new Set());
-    setIsBulkCanceling(false);
-    setBulkCancelProgress({ current: 0, total: 0 });
-  }, [selectedStreamIds]);
+  }, [selectedStreamIds, pendingBulkAction, onBulkCancel, onBulkPause]);
 
   useEffect(() => {
     setSelectedStreamIds((prev) => {
@@ -411,9 +413,36 @@ export function StreamsTable({
             alignItems: "center",
             marginBottom: "1rem",
             gap: "0.75rem",
+            flexWrap: "wrap",
           }}
         >
-          <h2 style={{ margin: 0 }}>Live Streams</h2>
+          <div style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
+            <h2 style={{ margin: 0 }}>Live Streams</h2>
+            {selectedStreamIds.size > 0 && (
+              <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+                <span className="muted" style={{ fontSize: "0.85rem" }}>
+                  {selectedStreamIds.size} selected
+                </span>
+                <button
+                  type="button"
+                  className="btn-ghost"
+                  onClick={() => setPendingBulkAction("cancel")}
+                  disabled={isBulkProcessing}
+                  style={{ color: "var(--color-danger, #e53e3e)" }}
+                >
+                  Cancel Selected
+                </button>
+                <button
+                  type="button"
+                  className="btn-ghost"
+                  onClick={() => setPendingBulkAction("pause")}
+                  disabled={isBulkProcessing}
+                >
+                  Pause Selected
+                </button>
+              </div>
+            )}
+          </div>
           <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
             <div className="column-toggle" ref={columnsRef} style={{ position: "relative" }}>
               <button
@@ -563,46 +592,112 @@ export function StreamsTable({
         </div>
       </div>
 
-      {selectedStreamIds.size > 0 && (
-        <BulkActionBar
-          selectedCount={selectedStreamIds.size}
-          onCancel={handleBulkCancel}
-          isCanceling={isBulkCanceling}
-          progress={bulkCancelProgress}
+      {pendingBulkAction && (
+        <BulkConfirmModal
+          action={pendingBulkAction}
+          streamIds={Array.from(selectedStreamIds)}
+          streams={streamsWithProgress}
+          isProcessing={isBulkProcessing}
+          onConfirm={handleBulkActionConfirm}
+          onClose={() => {
+            if (!isBulkProcessing) setPendingBulkAction(null);
+          }}
         />
       )}
     </>
   );
 }
 
-interface BulkActionBarProps {
-  selectedCount: number;
-  onCancel: () => void;
-  isCanceling: boolean;
-  progress: { current: number; total: number };
+interface BulkConfirmModalProps {
+  action: "cancel" | "pause";
+  streamIds: string[];
+  streams: Stream[];
+  isProcessing: boolean;
+  onConfirm: () => void;
+  onClose: () => void;
 }
 
-function BulkActionBar({
-  selectedCount,
-  onCancel,
-  isCanceling,
-  progress,
-}: BulkActionBarProps) {
+function BulkConfirmModal({
+  action,
+  streamIds,
+  streams,
+  isProcessing,
+  onConfirm,
+  onClose,
+}: BulkConfirmModalProps) {
+  const panelRef = useFocusTrap<HTMLDivElement>(true);
+  const actionLabel = action === "cancel" ? "Cancel" : "Pause";
+  const actionLabelPast = action === "cancel" ? "Canceled" : "Paused";
+
+  const selectedStreams = useMemo(
+    () => streams.filter((s) => streamIds.includes(s.id)),
+    [streams, streamIds],
+  );
+
   return (
-    <div className="bulk-action-bar">
-      <div className="bulk-action-bar__content">
-        <span className="bulk-action-bar__count">
-          {selectedCount} stream{selectedCount !== 1 ? "s" : ""} selected
-        </span>
-        <button
-          className="bulk-action-bar__button"
-          onClick={onCancel}
-          disabled={isCanceling}
+    <div
+      className="modal-backdrop"
+      onClick={(e) => {
+        if (e.target === e.currentTarget && !isProcessing) onClose();
+      }}
+    >
+      <div
+        ref={panelRef}
+        className="modal-panel"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="bulk-confirm-title"
+      >
+        <h2 id="bulk-confirm-title">
+          {actionLabel} {streamIds.length} Stream{streamIds.length !== 1 ? "s" : ""}
+        </h2>
+
+        <p className="muted">
+          The following stream{streamIds.length !== 1 ? "s" : ""} will be {action === "cancel" ? "canceled" : "paused"}:
+        </p>
+
+        <ul
+          style={{
+            maxHeight: "200px",
+            overflowY: "auto",
+            margin: "0.5rem 0",
+            paddingLeft: "1.25rem",
+            fontSize: "0.85rem",
+          }}
         >
-          {isCanceling
-            ? `Canceling ${progress.current}/${progress.total}...`
-            : `Cancel ${selectedCount} Stream${selectedCount !== 1 ? "s" : ""}`}
-        </button>
+          {selectedStreams.map((s) => (
+            <li key={s.id}>
+              {s.id} — {s.recipient.slice(0, 8)}… ({s.assetCode})
+            </li>
+          ))}
+        </ul>
+
+        {isProcessing && (
+          <p className="muted" role="status" aria-live="polite">
+            {actionLabelPast}...
+          </p>
+        )}
+
+        <div className="modal-actions">
+          {isProcessing ? (
+            <button type="button" className="btn-primary" disabled aria-busy="true">
+              {actionLabelPast}…
+            </button>
+          ) : (
+            <>
+              <button type="button" className="btn-ghost" onClick={onClose}>
+                Cancel
+              </button>
+              <button
+                type="button"
+                className={`btn-primary ${action === "cancel" ? "btn-danger" : ""}`}
+                onClick={onConfirm}
+              >
+                {actionLabel} {streamIds.length} Stream{streamIds.length !== 1 ? "s" : ""}
+              </button>
+            </>
+          )}
+        </div>
       </div>
     </div>
   );

@@ -171,12 +171,20 @@ describe("StreamsTable infinite scroll", () => {
     const onLoadMore = vi.fn();
     let observerCallback: IntersectionObserverCallback = () => {};
 
-    vi.spyOn(window, "IntersectionObserver").mockImplementation(
-      (callback) => {
-        observerCallback = callback;
-        return { observe: vi.fn(), disconnect: vi.fn(), unobserve: vi.fn(), root: null, rootMargin: "", thresholds: [] };
-      },
-    );
+    function MockIntersectionObserver(
+      this: IntersectionObserver,
+      callback: IntersectionObserverCallback,
+    ) {
+      observerCallback = callback;
+      this.observe = vi.fn();
+      this.disconnect = vi.fn();
+      this.unobserve = vi.fn();
+      this.root = null;
+      this.rootMargin = "";
+      this.thresholds = [];
+    }
+
+    vi.stubGlobal("IntersectionObserver", MockIntersectionObserver);
 
     render(
       <StreamsTable
@@ -187,23 +195,32 @@ describe("StreamsTable infinite scroll", () => {
       />,
     );
 
-    // Simulate sentinel becoming visible
     const sentinel = screen.getByTestId("infinite-scroll-sentinel");
     observerCallback([{ isIntersecting: true, target: sentinel } as unknown as IntersectionObserverEntry], null!);
 
     expect(onLoadMore).toHaveBeenCalledTimes(1);
+
+    vi.unstubAllGlobals();
   });
 
   it("does not call onLoadMore when hasMore is false", () => {
     const onLoadMore = vi.fn();
     let observerCallback: IntersectionObserverCallback = () => {};
 
-    vi.spyOn(window, "IntersectionObserver").mockImplementation(
-      (callback) => {
-        observerCallback = callback;
-        return { observe: vi.fn(), disconnect: vi.fn(), unobserve: vi.fn(), root: null, rootMargin: "", thresholds: [] };
-      },
-    );
+    function MockIntersectionObserver(
+      this: IntersectionObserver,
+      callback: IntersectionObserverCallback,
+    ) {
+      observerCallback = callback;
+      this.observe = vi.fn();
+      this.disconnect = vi.fn();
+      this.unobserve = vi.fn();
+      this.root = null;
+      this.rootMargin = "";
+      this.thresholds = [];
+    }
+
+    vi.stubGlobal("IntersectionObserver", MockIntersectionObserver);
 
     render(
       <StreamsTable
@@ -218,18 +235,28 @@ describe("StreamsTable infinite scroll", () => {
     observerCallback([{ isIntersecting: true, target: sentinel } as unknown as IntersectionObserverEntry], null!);
 
     expect(onLoadMore).not.toHaveBeenCalled();
+
+    vi.unstubAllGlobals();
   });
 
   it("does not call onLoadMore when already loadingMore", () => {
     const onLoadMore = vi.fn();
     let observerCallback: IntersectionObserverCallback = () => {};
 
-    vi.spyOn(window, "IntersectionObserver").mockImplementation(
-      (callback) => {
-        observerCallback = callback;
-        return { observe: vi.fn(), disconnect: vi.fn(), unobserve: vi.fn(), root: null, rootMargin: "", thresholds: [] };
-      },
-    );
+    function MockIntersectionObserver(
+      this: IntersectionObserver,
+      callback: IntersectionObserverCallback,
+    ) {
+      observerCallback = callback;
+      this.observe = vi.fn();
+      this.disconnect = vi.fn();
+      this.unobserve = vi.fn();
+      this.root = null;
+      this.rootMargin = "";
+      this.thresholds = [];
+    }
+
+    vi.stubGlobal("IntersectionObserver", MockIntersectionObserver);
 
     render(
       <StreamsTable
@@ -244,6 +271,8 @@ describe("StreamsTable infinite scroll", () => {
     observerCallback([{ isIntersecting: true, target: sentinel } as unknown as IntersectionObserverEntry], null!);
 
     expect(onLoadMore).not.toHaveBeenCalled();
+
+    vi.unstubAllGlobals();
   });
 });
 
@@ -281,5 +310,86 @@ describe("StreamsTable WebSocket progress updates", () => {
     // 2. Simulating a stream_progress message with { streamId: "1", progress: { percentComplete: 50 } }
     // 3. Asserting the progress bar for stream 1 updates to "50%"
     // The component structure is in place to handle this via streamProgressUpdates Map
+  });
+});
+
+describe("StreamsTable bulk selection UI", () => {
+  beforeEach(() => {
+    localStorage.clear();
+  });
+
+  afterEach(() => {
+    cleanup();
+    vi.clearAllMocks();
+  });
+
+  it("shows Cancel Selected and Pause Selected buttons when at least one stream is selected", () => {
+    const streams = [
+      createMockStream("1", "active"),
+      createMockStream("2", "scheduled"),
+    ];
+
+    render(<StreamsTable {...defaultProps} streams={streams} />);
+
+    expect(screen.queryByText("Cancel Selected")).not.toBeInTheDocument();
+    expect(screen.queryByText("Pause Selected")).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByLabelText("Select stream 1"));
+
+    expect(screen.getByText("Cancel Selected")).toBeInTheDocument();
+    expect(screen.getByText("Pause Selected")).toBeInTheDocument();
+    expect(screen.getByText("1 selected")).toBeInTheDocument();
+  });
+
+  it("hides bulk action buttons when all streams are deselected", () => {
+    render(<StreamsTable {...defaultProps} streams={[createMockStream("1", "active")]} />);
+
+    fireEvent.click(screen.getByLabelText("Select stream 1"));
+    expect(screen.getByText("Cancel Selected")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByLabelText("Select stream 1"));
+    expect(screen.queryByText("Cancel Selected")).not.toBeInTheDocument();
+  });
+
+  it("shows confirmation modal when Cancel Selected is clicked", () => {
+    const streams = [
+      createMockStream("1", "active"),
+      createMockStream("2", "active"),
+    ];
+
+    render(<StreamsTable {...defaultProps} streams={streams} />);
+
+    fireEvent.click(screen.getByLabelText("Select stream 1"));
+    fireEvent.click(screen.getByText("Cancel Selected"));
+
+    expect(screen.getByRole("dialog")).toBeInTheDocument();
+    expect(screen.getByText(/will be canceled/i)).toBeInTheDocument();
+  });
+
+  it("calls onBulkCancel when confirmed in modal", async () => {
+    const onBulkCancel = vi.fn().mockResolvedValue(undefined);
+    const streams = [createMockStream("1", "active")];
+
+    render(
+      <StreamsTable
+        {...defaultProps}
+        streams={streams}
+        onBulkCancel={onBulkCancel}
+      />,
+    );
+
+    fireEvent.click(screen.getByLabelText("Select stream 1"));
+    fireEvent.click(screen.getByText("Cancel Selected"));
+
+    const confirmBtns = screen.getAllByText("Cancel 1 Stream");
+    const confirmBtn = confirmBtns.find(
+      (btn) => btn.tagName === "BUTTON",
+    );
+    expect(confirmBtn).toBeDefined();
+    fireEvent.click(confirmBtn!);
+
+    await vi.waitFor(() => {
+      expect(onBulkCancel).toHaveBeenCalledWith(["1"]);
+    });
   });
 });

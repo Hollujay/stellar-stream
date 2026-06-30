@@ -360,6 +360,42 @@ export async function getConfig(): Promise<AppConfig> {
   return parseResponse<AppConfig>(response);
 }
 
+export interface BulkActionResult {
+  streamId: string;
+  success: boolean;
+  error?: string;
+}
+
+export async function bulkCancelStreams(streamIds: string[]): Promise<BulkActionResult[]> {
+  const headers: Record<string, string> = { "Content-Type": "application/json" };
+  if (authToken) {
+    headers["Authorization"] = `Bearer ${authToken}`;
+  }
+
+  const response = await fetch(`${API_BASE}/streams/bulk-cancel`, {
+    method: "POST",
+    headers,
+    body: JSON.stringify({ streamIds }),
+  });
+  const body = await parseResponse<{ results: BulkActionResult[] }>(response);
+  return body.results;
+}
+
+export async function bulkPauseStreams(streamIds: string[]): Promise<BulkActionResult[]> {
+  const headers: Record<string, string> = { "Content-Type": "application/json" };
+  if (authToken) {
+    headers["Authorization"] = `Bearer ${authToken}`;
+  }
+
+  const response = await fetch(`${API_BASE}/streams/bulk-pause`, {
+    method: "POST",
+    headers,
+    body: JSON.stringify({ streamIds }),
+  });
+  const body = await parseResponse<{ results: BulkActionResult[] }>(response);
+  return body.results;
+}
+
 export function clearCache() {
   cache.clear();
 }

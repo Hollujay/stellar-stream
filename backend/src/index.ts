@@ -1395,6 +1395,109 @@ app.post(
   },
 );
 
+const bulkActionBodySchema = z.object({
+  streamIds: z
+    .array(z.string().min(1, "Stream ID must not be empty"))
+    .min(1, "At least one stream ID is required")
+    .max(50, "Maximum 50 stream IDs per request"),
+});
+
+// POST /api/streams/bulk-cancel — cancel multiple streams at once
+app.post(
+  "/api/streams/bulk-cancel",
+  mutationLimiter,
+  authMiddleware,
+  async (req: Request, res: Response) => {
+    const parsed = bulkActionBodySchema.safeParse(req.body);
+    if (!parsed.success) {
+      sendValidationError(req, res, parsed.error.issues);
+      return;
+    }
+
+    const user = (req as any).user;
+    const results: Array<{ streamId: string; success: boolean; error?: string }> = [];
+
+    for (const streamId of parsed.data.streamIds) {
+      const parsedId = parseStreamId(streamId);
+      if (!parsedId.ok) {
+        results.push({ streamId, success: false, error: "Invalid stream ID" });
+        continue;
+      }
+
+      const stream = getStream(parsedId.value);
+      if (!stream) {
+        results.push({ streamId, success: false, error: "Stream not found" });
+        continue;
+      }
+
+      if (stream.sender !== user.accountId) {
+        results.push({ streamId, success: false, error: "Forbidden: not the sender" });
+        continue;
+      }
+
+      try {
+        const updated = await cancelStream(parsedId.value);
+        if (!updated) {
+          results.push({ streamId, success: false, error: "Failed to cancel stream" });
+        } else {
+          results.push({ streamId, success: true });
+        }
+      } catch (error: any) {
+        logger.error({ err: error, streamId }, "failed to cancel stream in bulk");
+        results.push({ streamId, success: false, error: error.message || "Failed to cancel stream" });
+      }
+    }
+
+    res.json({ results });
+  },
+);
+
+// POST /api/streams/bulk-pause — pause multiple streams at once
+app.post(
+  "/api/streams/bulk-pause",
+  mutationLimiter,
+  authMiddleware,
+  async (req: Request, res: Response) => {
+    const parsed = bulkActionBodySchema.safeParse(req.body);
+    if (!parsed.success) {
+      sendValidationError(req, res, parsed.error.issues);
+      return;
+    }
+
+    const user = (req as any).user;
+    const results: Array<{ streamId: string; success: boolean; error?: string }> = [];
+
+    for (const streamId of parsed.data.streamIds) {
+      const parsedId = parseStreamId(streamId);
+      if (!parsedId.ok) {
+        results.push({ streamId, success: false, error: "Invalid stream ID" });
+        continue;
+      }
+
+      const stream = getStream(parsedId.value);
+      if (!stream) {
+        results.push({ streamId, success: false, error: "Stream not found" });
+        continue;
+      }
+
+      if (stream.sender !== user.accountId) {
+        results.push({ streamId, success: false, error: "Forbidden: not the sender" });
+        continue;
+      }
+
+      try {
+        await pauseStream(parsedId.value);
+        results.push({ streamId, success: true });
+      } catch (error: any) {
+        logger.error({ err: error, streamId }, "failed to pause stream in bulk");
+        results.push({ streamId, success: false, error: error.message || "Failed to pause stream" });
+      }
+    }
+
+    res.json({ results });
+  },
+);
+
 // POST /api/streams/:id/reconcile — sync on-chain state to local SQLite
 app.post(
   "/api/streams/:id/reconcile",
