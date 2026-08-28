@@ -16,6 +16,10 @@ RUN npm install --ignore-scripts 2>/dev/null || true
 # Copy all source files
 COPY . .
 
+# CI=true skips the vite-plugin-pwa/workbox-build step (see vite.config.ts) —
+# that plugin crashes on validate-options in this environment.
+ENV CI=true
+
 # Build static assets
 RUN npm run build
 
