@@ -46,7 +46,7 @@ function createTempDbPath(): string {
   );
 }
 
-function openDb(dbPath: string): Database.Database {
+function openDb(dbPath: string): any {
   const db = new Database(dbPath);
   db.pragma("foreign_keys = ON");
   return db;
@@ -54,7 +54,7 @@ function openDb(dbPath: string): Database.Database {
 
 describe("database migrations", () => {
   let dbPath: string;
-  let db: Database.Database;
+  let db: any;
 
   afterEach(() => {
     if (db) {

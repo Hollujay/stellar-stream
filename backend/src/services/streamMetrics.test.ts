@@ -5,7 +5,7 @@ import { vi } from "vitest";
 let db: InstanceType<typeof Database>;
 vi.mock("./db", () => ({ getDb: () => db }));
 
-const { getStreamMetrics, resetStreamMetricsCache } = await import("./streamMetrics");
+import { getStreamMetrics, resetStreamMetricsCache } from "./streamMetrics";
 
 function setupDb() {
   db = new Database(":memory:");

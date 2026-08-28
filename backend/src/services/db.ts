@@ -327,4 +327,81 @@ export function initDb(): void {
   }
 
   runMigrations(db);
+  seedAllowedAssetsIfEmpty(db);
+}
+
+function seedAllowedAssetsIfEmpty(dbInstance: any): void {
+  const row = dbInstance
+    .prepare("SELECT COUNT(*) as count FROM allowed_assets")
+    .get() as { count: number };
+  if (row.count > 0) return;
+
+  const defaults = (process.env.ALLOWED_ASSETS || "USDC,XLM")
+    .split(",")
+    .map((code) => code.trim().toUpperCase())
+    .filter(Boolean);
+
+  const insert = dbInstance.prepare(
+    "INSERT OR IGNORE INTO allowed_assets (code) VALUES (?)",
+  );
+  dbInstance.transaction(() => {
+    for (const code of defaults) {
+      insert.run(code);
+    }
+  })();
+}
+
+/** Keeps the FTS5 search index in sync with a stream's sender/recipient/asset. Best-effort. */
+export function syncFtsIndex(
+  streamId: string,
+  sender: string,
+  recipient: string,
+  assetCode: string,
+): void {
+  try {
+    getDb()
+      .prepare(
+        `INSERT INTO streams_fts(rowid, stream_id, sender, recipient, asset_code)
+         VALUES ((SELECT rowid FROM streams WHERE id = ?), ?, ?, ?, ?)
+         ON CONFLICT(rowid) DO UPDATE SET
+           sender = excluded.sender,
+           recipient = excluded.recipient,
+           asset_code = excluded.asset_code`,
+      )
+      .run(streamId, streamId, sender, recipient, assetCode);
+  } catch {
+    // FTS index update is best-effort; search degrades gracefully if it fails.
+  }
+}
+
+/** Searches streams via the FTS5 index, returning matching stream IDs ranked by relevance. */
+export function searchStreamsFts(query: string): string[] {
+  try {
+    const rows = getDb()
+      .prepare(
+        `SELECT stream_id FROM streams_fts WHERE streams_fts MATCH ? ORDER BY rank`,
+      )
+      .all(query) as Array<{ stream_id: string }>;
+    return rows.map((row) => row.stream_id);
+  } catch {
+    return [];
+  }
+}
+
+/** Returns allowed asset codes in insertion order (seed order, then any admin additions appended). */
+export function getAllowedAssets(): string[] {
+  const rows = getDb()
+    .prepare("SELECT code FROM allowed_assets ORDER BY rowid")
+    .all() as Array<{ code: string }>;
+  return rows.map((row) => row.code);
+}
+
+export function addAllowedAsset(code: string): void {
+  getDb()
+    .prepare("INSERT OR IGNORE INTO allowed_assets (code) VALUES (?)")
+    .run(code);
+}
+
+export function removeAllowedAsset(code: string): void {
+  getDb().prepare("DELETE FROM allowed_assets WHERE code = ?").run(code);
 }

@@ -808,25 +808,19 @@ export async function createStream(input: StreamInput): Promise<StreamRecord> {
     const sourceAccount = await rpcServer.getAccount(serverKeypair.publicKey());
     const op = createStreamOperation(contractId, input, startAt);
 
-    const txToSimulate = new TransactionBuilder(sourceAccount, {
-  const built = await rpcServer.prepareTransaction(
-    new TransactionBuilder(sourceAccount, {
-      fee: "1000",
-      networkPassphrase: netPass,
-    })
-      .addOperation(op)
-      .setTimeout(30)
-      .build();
+    const built = await rpcServer.prepareTransaction(
+      new TransactionBuilder(sourceAccount, {
+        fee: "1000",
+        networkPassphrase: netPass,
+      })
+        .addOperation(op)
+        .setTimeout(30)
+        .build(),
+    );
 
-    const simRes = await rpcServer.simulateTransaction(txToSimulate);
-    if (!rpc.Api.isSimulationSuccess(simRes)) {
-      throw new Error("Soroban RPC simulation failed: " + JSON.stringify(simRes));
-    }
+    built.sign(serverKeypair);
 
-    const preparedTx = await rpcServer.prepareTransaction(txToSimulate);
-    preparedTx.sign(serverKeypair);
-
-    const sendRes = await retryWithBackoff(() => rpcServer!.sendTransaction(preparedTx));
+    const sendRes = await retryWithBackoff(() => rpcServer!.sendTransaction(built));
     if (sendRes.status !== "PENDING") {
       throw new Error("Failed to send transaction: " + JSON.stringify(sendRes));
     }

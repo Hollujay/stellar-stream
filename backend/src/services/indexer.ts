@@ -293,7 +293,7 @@ async function indexEventsWithFallback(db: any, currentLedger: number): Promise<
   let events;
 
   try {
-    events = await rpcServer.getEvents({
+    events = await rpcServer!.getEvents({
       startLedger,
       filters: [
         {
@@ -362,7 +362,7 @@ async function indexEventsWithCursorPagination(db: any, currentLedger: number): 
     let eventsResponse: rpc.Api.GetEventsResponse;
 
     try {
-      eventsResponse = await rpcServer.getEvents(request);
+      eventsResponse = await rpcServer!.getEvents(request);
     } catch (err) {
       logger.error({ err }, "RPC getEvents failed during cursor pagination");
       throw err;
