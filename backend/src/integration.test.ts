@@ -51,9 +51,10 @@ describe("Backend Integration Tests", () => {
     // the mocked rpc.Server above makes on-chain calls deterministic.
     process.env.CONTRACT_ID = StrKey.encodeContract(Buffer.alloc(32, 7));
 
-    // Initialize database and cache
-    initDb();
-    initCache();
+    // Initialize database and cache. initSoroban() already calls initDb()
+    // and initCache() internally — don't call them again here, since
+    // reopening the same on-disk DB mid-migration races runMigrations()
+    // against itself (UNIQUE constraint failures on schema_migrations).
     await initSoroban();
   });
 

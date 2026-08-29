@@ -36,6 +36,9 @@ jobs:
           PORT=3001
           SOROBAN_DISABLED=true
           ALLOWED_ASSETS=USDC,XLM
+          NODE_ENV=production
+          JWT_SECRET=e2e-ci-only-jwt-secret-not-used-in-production
+          SERVER_SIGNING_KEY=SAF6QXZQEAYXJVATNT2BXJV4QKDJ4AQ4UMS3C6JTEFZ324UJQAOB47JB
           EOF
 
       - name: Start Docker Compose stack
