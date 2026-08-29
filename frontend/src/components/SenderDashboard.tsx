@@ -206,9 +206,13 @@ export function SenderDashboard({
     streams.forEach((stream) => {
       statusCounts[stream.progress.status] =
         (statusCounts[stream.progress.status] || 0) + 1;
-      totalAmount += stream.totalAmount;
-      assetAmounts[stream.assetCode] =
-        (assetAmounts[stream.assetCode] || 0) + stream.totalAmount;
+      // "Total Amount Streamed" reflects streams that have actually started
+      // vesting — a scheduled stream hasn't streamed anything yet.
+      if (stream.progress.status !== "scheduled") {
+        totalAmount += stream.totalAmount;
+        assetAmounts[stream.assetCode] =
+          (assetAmounts[stream.assetCode] || 0) + stream.totalAmount;
+      }
     });
 
     return {

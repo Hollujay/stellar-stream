@@ -12,6 +12,7 @@ vi.mock("./metrics", () => ({
 
 import { app } from "../index";
 import { initDb, getDb } from "./db";
+import { initCache } from "./cache";
 import { getStreamHistory } from "./eventHistory";
 import { getJwtSecret } from "./auth";
 import path from "path";
@@ -30,6 +31,7 @@ describe("POST /api/streams/:id/mark-complete Integration Tests", () => {
     vi.stubEnv('JWT_SECRET', TEST_SECRET);
     process.env.DB_PATH = TEST_DB_PATH;
     initDb();
+    initCache();
 
     authToken = jwt.sign({ accountId: mockSender }, getJwtSecret(), { expiresIn: '1h' });
     recipientToken = jwt.sign({ accountId: mockRecipient }, getJwtSecret(), { expiresIn: '1h' });

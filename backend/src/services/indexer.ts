@@ -393,9 +393,13 @@ async function indexEventsWithCursorPagination(db: any, currentLedger: number): 
     }
   }
 
-  if (totalProcessed > 0) {
-    lastProcessedLedger = Math.max(lastProcessedLedger, maxLedgerSeen);
-    saveCheckpoint(db, lastProcessedLedger);
+  // Advance the checkpoint to currentLedger even when no events were found:
+  // getEvents scans up through the current ledger, so an empty result still
+  // means the range up to currentLedger is known-clean and must not be
+  // rescanned on every subsequent poll.
+  lastProcessedLedger = Math.max(lastProcessedLedger, maxLedgerSeen, currentLedger);
+  saveCheckpoint(db, lastProcessedLedger);
+  if (lastProcessedLedger > startLedgerForMetrics) {
     ledgersScannedTotal.inc(lastProcessedLedger - startLedgerForMetrics);
   }
 }
