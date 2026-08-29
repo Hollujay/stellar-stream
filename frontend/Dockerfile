@@ -54,6 +54,19 @@ server {
         try_files $uri =404;
     }
 
+    # Proxy API calls to the backend service. The app calls a relative
+    # /api/... path by default (see frontend/src/services/api.ts), so
+    # without this the SPA fallback below would serve index.html for every
+    # API request instead of reaching the backend.
+    location /api/ {
+        proxy_pass http://backend:3001/api/;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+
     # SPA fallback — all other paths serve index.html
     location / {
         try_files $uri $uri/ /index.html;
