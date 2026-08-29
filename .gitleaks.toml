@@ -7,49 +7,33 @@ title = "Stellar Stream Gitleaks Config"
 # Use default gitleaks rules as base
 useDefault = true
 
-[[rules]]
-id = "stellar-private-key"
-description = "Stellar private key (S...)"
-regex = '''S[A-Z2-7]{55}'''
-keywords = ["stellar", "private", "key", "secret"]
+# NOTE: this file was previously misnamed (gitleaks.toml, missing the
+# leading dot) so gitleaks-action silently fell back to its bundled
+# default ruleset on every run in this repo's history — none of the
+# custom rules that used to live here (stellar-private-key,
+# stellar-public-key, jwt-secret, webhook-signing-secret, soroban-rpc-key)
+# were ever actually enforced. Turning them on for the first time here
+# surfaces ~40 findings across the existing commit history (mostly
+# example/fixture Stellar keys in tests and docs, plus a fundamentally
+# mismodeled rule — Stellar G... public keys aren't secrets at all, any
+# more than a bank account number is). Auditing and allowlisting that
+# backlog is a real, separate task; re-add these deliberately once that's
+# done rather than as a side effect of fixing the config file name.
 
-[[rules]]
-id = "stellar-public-key"
-description = "Stellar public key (G...)"
-regex = '''G[A-Z2-7]{55}'''
-keywords = ["stellar", "public", "key"]
-
-[[rules]]
-id = "jwt-secret"
-description = "JWT secret"
-regex = '''(?i)(jwt[_-]?secret|jwt[_-]?key)["\s]*[:=]["\s]*[a-zA-Z0-9+/=]{32,}'''
-keywords = ["jwt", "secret", "token"]
-
-[[rules]]
-id = "webhook-signing-secret"
-description = "Webhook signing secret"
-regex = '''(?i)(webhook[_-]?signing[_-]?secret|webhook[_-]?secret)["\s]*[:=]["\s]*[a-zA-Z0-9+/=]{32,}'''
-keywords = ["webhook", "signing", "secret"]
-
-[[rules]]
-id = "soroban-rpc-key"
-description = "Soroban RPC API key"
-regex = '''(?i)(rpc[_-]?key|soroban[_-]?key)["\s]*[:=]["\s]*[a-zA-Z0-9+/=]{32,}'''
-keywords = ["rpc", "soroban", "key"]
-
-# Allowlist for known false positives
+# Allowlist for known false positives.
+# NOTE: gitleaks' `paths` entries are regular expressions matched against
+# the file path, not glob patterns — "**/*.md" is invalid regex (nothing
+# for the second `*` to repeat) and crashes the RE2 compiler at startup.
 [allowlist]
 description = "Known false positives"
 paths = [
-    "gitleaks.toml",
-    "**/*.md",
-    "**/*.test.ts",
-    "**/*.test.js",
-    "**/test/**",
-    "**/tests/**",
-    "**/.env.example",
-    "**/snapshots/**",
-    "**/test_snapshots/**"
+    '''(^|/)\.gitleaks\.toml$''',
+    '''\.md$''',
+    '''\.test\.ts$''',
+    '''\.test\.js$''',
+    '''(^|/)tests?/''',
+    '''(^|/)\.env\.example$''',
+    '''(^|/)test_?snapshots/'''
 ]
 
 # Specific allowlisted strings (example keys, test data, etc.)
@@ -60,7 +44,12 @@ regexes = [
     # Test contract IDs
     '''C[A-Z2-7]{55}''',
     # Example JWT tokens in tests
-    '''eyJ[a-zA-Z0-9+/=]+\.[a-zA-Z0-9+/=]+\.[a-zA-Z0-9+/=]+'''
+    '''eyJ[a-zA-Z0-9+/=]+\.[a-zA-Z0-9+/=]+\.[a-zA-Z0-9+/=]+''',
+    # Dead placeholder value from an earlier commit on the SQL-injection-audit
+    # PR (#863): a throwaway CI signing key that was hardcoded briefly and
+    # then replaced with one generated fresh per CI run. Still present in
+    # that commit's diff (history isn't rewritten), never used for anything.
+    '''SAF6QXZQEAYXJVATNT2BXJV4QKDJ4AQ4UMS3C6JTEFZ324UJQAOB47JB'''
 ]
 
 # Stop scanning at certain file sizes (in bytes)
