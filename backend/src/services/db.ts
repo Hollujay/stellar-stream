@@ -2,8 +2,16 @@ import Database from "better-sqlite3";
 import path from "path";
 import { runMigrations } from "./migrations";
 
-const DB_PATH =
-  process.env.DB_PATH || path.join(__dirname, "..", "..", "data", "streams.db");
+// Resolved lazily (not frozen as a module-level constant) because several
+// integration test files set process.env.DB_PATH for isolation before
+// calling initDb() — but ES import statements are hoisted above any
+// interleaved top-level code, so this module can be evaluated before that
+// assignment runs. Reading it here, at call time inside initDb(), ensures
+// each test file's beforeAll actually gets its own database file instead of
+// every file silently falling back to the same default data/streams.db.
+function getDbPath(): string {
+  return process.env.DB_PATH || path.join(__dirname, "..", "..", "data", "streams.db");
+}
 
 let db: any;
 
@@ -312,13 +320,14 @@ export function initDb(): void {
   if (isPostgres()) {
     db = new PostgresDatabase(process.env.DATABASE_URL!);
   } else {
-    const dir = path.dirname(DB_PATH);
+    const dbPath = getDbPath();
+    const dir = path.dirname(dbPath);
     const fs = require("fs");
     if (!fs.existsSync(dir)) {
       fs.mkdirSync(dir, { recursive: true });
     }
 
-    db = new Database(DB_PATH);
+    db = new Database(dbPath);
     db.pragma("journal_mode = WAL");
     db.pragma("foreign_keys = ON");
     db.pragma("synchronous = NORMAL");
