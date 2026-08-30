@@ -12,7 +12,7 @@ vi.mock("./metrics", () => ({
 
 import { app } from "../index";
 import { initDb, getDb } from "./db";
-import { initCache } from "./cache";
+import { initCache, getCache } from "./cache";
 import { getStreamHistory } from "./eventHistory";
 import { getJwtSecret } from "./auth";
 import path from "path";
@@ -37,11 +37,15 @@ describe("POST /api/streams/:id/mark-complete Integration Tests", () => {
     recipientToken = jwt.sign({ accountId: mockRecipient }, getJwtSecret(), { expiresIn: '1h' });
   });
 
-  beforeEach(() => {
+  beforeEach(async () => {
     const db = getDb();
     db.exec("DELETE FROM stream_events");
     db.exec("DELETE FROM webhook_deliveries");
     db.exec("DELETE FROM streams");
+    // Raw SQL cleanup bypasses the streamStore mutation paths that
+    // normally invalidate the per-stream and list caches on write, so a
+    // stale cached entry from a previous test can otherwise leak in here.
+    await getCache().clear();
   });
 
   afterAll(() => {

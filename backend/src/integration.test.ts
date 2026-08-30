@@ -421,7 +421,7 @@ describe("Backend Integration Tests", () => {
         const recipientC = "G" + "C".repeat(55);
         const recipientD = "G" + "D".repeat(55);
 
-        function seedStreams() {
+        async function seedStreams() {
           const db = getDb();
           db.exec("DELETE FROM streams");
 
@@ -466,10 +466,16 @@ describe("Backend Integration Tests", () => {
               completedAt,
             });
           }
+
+          // GET /api/streams caches list responses by query string; this
+          // helper writes directly via getDb(), bypassing the streamStore
+          // mutation paths that normally invalidate that cache, so a stale
+          // cached list from a previous test can otherwise leak in here.
+          await getCache().clear();
         }
 
         it("should include pagination metadata for multi-page results", async () => {
-          seedStreams();
+          await seedStreams();
 
           const pageOne = await request(app)
             .get("/api/streams")
@@ -493,7 +499,7 @@ describe("Backend Integration Tests", () => {
         });
 
         it("should apply q filtering across id, sender, recipient, and asset", async () => {
-          seedStreams();
+          await seedStreams();
 
           const byId = await request(app)
             .get("/api/streams")
@@ -533,7 +539,7 @@ describe("Backend Integration Tests", () => {
         });
 
         it("should combine status and q filters", async () => {
-          seedStreams();
+          await seedStreams();
 
           const response = await request(app)
             .get("/api/streams")
@@ -550,7 +556,7 @@ describe("Backend Integration Tests", () => {
         });
 
         it("should return all matching rows when pagination params are omitted", async () => {
-          seedStreams();
+          await seedStreams();
 
           const response = await request(app)
             .get("/api/streams")
@@ -593,7 +599,7 @@ describe("Backend Integration Tests", () => {
         const senderAlpha = "G" + "A".repeat(55);
         const recipientAlpha = "G" + "B".repeat(55);
 
-        function seedSortableStreams() {
+        async function seedSortableStreams() {
           const db = getDb();
           db.exec("DELETE FROM streams");
           const now = Math.floor(Date.now() / 1000);
@@ -608,10 +614,16 @@ describe("Backend Integration Tests", () => {
           insert.run({ id: "2", sender: senderAlpha, recipient: recipientAlpha, assetCode: "USDC", totalAmount: 500, durationSeconds: 500, startAt: now - 200, createdAt: now - 200 });
           // Stream C: largest totalAmount, latest startAt, latest createdAt, longest duration
           insert.run({ id: "3", sender: senderAlpha, recipient: recipientAlpha, assetCode: "USDC", totalAmount: 1000, durationSeconds: 1000, startAt: now - 100, createdAt: now - 100 });
+
+          // GET /api/streams caches list responses by query string; this
+          // helper writes directly via getDb(), bypassing the streamStore
+          // mutation paths that normally invalidate that cache, so a stale
+          // cached list from a previous test can otherwise leak in here.
+          await getCache().clear();
         }
 
         it("should sort by totalAmount asc", async () => {
-          seedSortableStreams();
+          await seedSortableStreams();
           const response = await request(app)
             .get("/api/streams")
             .query({ sort: "totalAmount", order: "asc" });
@@ -621,7 +633,7 @@ describe("Backend Integration Tests", () => {
         });
 
         it("should sort by totalAmount desc", async () => {
-          seedSortableStreams();
+          await seedSortableStreams();
           const response = await request(app)
             .get("/api/streams")
             .query({ sort: "totalAmount", order: "desc" });
@@ -631,7 +643,7 @@ describe("Backend Integration Tests", () => {
         });
 
         it("should sort by startAt asc", async () => {
-          seedSortableStreams();
+          await seedSortableStreams();
           const response = await request(app)
             .get("/api/streams")
             .query({ sort: "startAt", order: "asc" });
@@ -643,7 +655,7 @@ describe("Backend Integration Tests", () => {
         });
 
         it("should sort by startAt desc", async () => {
-          seedSortableStreams();
+          await seedSortableStreams();
           const response = await request(app)
             .get("/api/streams")
             .query({ sort: "startAt", order: "desc" });
@@ -655,7 +667,7 @@ describe("Backend Integration Tests", () => {
         });
 
         it("should sort by createdAt asc", async () => {
-          seedSortableStreams();
+          await seedSortableStreams();
           const response = await request(app)
             .get("/api/streams")
             .query({ sort: "createdAt", order: "asc" });
@@ -667,7 +679,7 @@ describe("Backend Integration Tests", () => {
         });
 
         it("should sort by createdAt desc (default)", async () => {
-          seedSortableStreams();
+          await seedSortableStreams();
           const response = await request(app)
             .get("/api/streams")
             .query({ sort: "createdAt", order: "desc" });
@@ -679,7 +691,7 @@ describe("Backend Integration Tests", () => {
         });
 
         it("should sort by durationSeconds asc", async () => {
-          seedSortableStreams();
+          await seedSortableStreams();
           const response = await request(app)
             .get("/api/streams")
             .query({ sort: "durationSeconds", order: "asc" });
@@ -689,7 +701,7 @@ describe("Backend Integration Tests", () => {
         });
 
         it("should sort by durationSeconds desc", async () => {
-          seedSortableStreams();
+          await seedSortableStreams();
           const response = await request(app)
             .get("/api/streams")
             .query({ sort: "durationSeconds", order: "desc" });
@@ -699,7 +711,7 @@ describe("Backend Integration Tests", () => {
         });
 
         it("should default to createdAt desc when no sort/order specified", async () => {
-          seedSortableStreams();
+          await seedSortableStreams();
           const response = await request(app)
             .get("/api/streams");
           expect(response.status).toBe(200);
